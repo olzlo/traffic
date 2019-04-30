@@ -34,11 +34,11 @@ func (e *env) init() {
 
 func (e *env) SharedKey() (key []byte, ok bool) {
 	b, ok := os.LookupEnv("TRAFFIC_SHARED")
-	key=string(b)
+	key = []byte(b)
 	return
 }
 func (e *env) User(uname string) (pwd []byte, ok bool) {
 	b, ok := os.LookupEnv("TRAFFIC_USER_" + strings.ToUpper(uname))
-	pwd = string(b)
+	pwd = []byte(b)
 	return
 }
