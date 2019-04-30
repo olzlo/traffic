@@ -2,8 +2,8 @@ package main
 
 import (
 	"flag"
-	mo "github.com/zsichen/traffic/src"
 	"net"
+	mo "traffic/src"
 )
 
 type Command struct {
@@ -15,7 +15,7 @@ type Command struct {
 
 var (
 	comm Command
-	auth mo.Auth
+	auth mo.IAuth
 )
 
 func main() {
@@ -47,7 +47,6 @@ func tcpListen() {
 	}
 }
 
-
 func handleConnection(conn net.Conn) {
-	
+
 }

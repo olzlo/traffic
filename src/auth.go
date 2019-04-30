@@ -14,13 +14,13 @@ type IAuth interface {
 }
 
 //NewAuthWithRds from redis
-func NewAuthWithRds() *IAuth {
+func NewAuthWithRds() IAuth {
 	return nil
 }
 
 //NewAuthWithEnv from env
-func NewAuthWithEnv() *IAuth {
-	return nil
+func NewAuthWithEnv() IAuth {
+	return &env{}
 }
 
 var _ IAuth = &env{}
