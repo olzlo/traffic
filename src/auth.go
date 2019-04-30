@@ -9,8 +9,8 @@ import (
 type IAuth interface {
 	init()
 	//pre-shared key encrypted handshake
-	SharedKey() (string, bool)
-	User(string) (string, bool)
+	SharedKey() ([]byte, bool)
+	User(string) ([]byte, bool)
 }
 
 //NewAuthWithRds from redis
@@ -32,11 +32,13 @@ func (e *env) init() {
 
 }
 
-func (e *env) SharedKey() (key string, ok bool) {
-	key, ok = os.LookupEnv("TRAFFIC_SHARED")
+func (e *env) SharedKey() (key []byte, ok bool) {
+	b, ok := os.LookupEnv("TRAFFIC_SHARED")
+	key=string(b)
 	return
 }
-func (e *env) User(uname string) (pwd string, ok bool) {
-	pwd, ok = os.LookupEnv("TRAFFIC_USER_" + strings.ToUpper(uname))
+func (e *env) User(uname string) (pwd []byte, ok bool) {
+	b, ok := os.LookupEnv("TRAFFIC_USER_" + strings.ToUpper(uname))
+	pwd = string(b)
 	return
 }

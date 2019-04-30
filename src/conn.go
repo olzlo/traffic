@@ -6,4 +6,5 @@ import (
 
 type Conn struct {
 	net.Conn
+	*Cipher
 }

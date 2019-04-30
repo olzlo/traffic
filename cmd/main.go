@@ -38,4 +38,16 @@ func tcpListen() {
 	if err != nil {
 		panic(err)
 	}
+	for {
+		conn, err := ln.Accept()
+		if err != nil {
+			panic(err)
+		}
+		go handleConnection(conn)
+	}
+}
+
+
+func handleConnection(conn net.Conn) {
+	
 }
