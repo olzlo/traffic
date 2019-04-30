@@ -1,2 +1,4 @@
 github.com/zsichen/traffic v0.0.0-20190430083231-8a0d4592621d h1:5PG46dn4YPWpttY2zdBHOGuWYC6kwnLQFDwqcNR0MQ8=
 github.com/zsichen/traffic v0.0.0-20190430083231-8a0d4592621d/go.mod h1:WFJrCaDKWhABL9SQv/p5ktoVgAKul3JS/0eKTfyC5Ng=
+github.com/zsichen/traffic v0.0.0-20190430083554-ea051da7afc3 h1:1lbU75Jk+2hMz2oHLvP5EXTcNkgFtECSWA2VwAW9aA8=
+github.com/zsichen/traffic v0.0.0-20190430083554-ea051da7afc3/go.mod h1:WFJrCaDKWhABL9SQv/p5ktoVgAKul3JS/0eKTfyC5Ng=
