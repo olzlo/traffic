@@ -13,13 +13,13 @@ type IAuth interface {
 	User(string) ([]byte, bool)
 }
 
-//NewAuthWithRds from redis
-func NewAuthWithRds() IAuth {
+//NewAuthFromRds from redis
+func NewAuthFromRds() IAuth {
 	return nil
 }
 
-//NewAuthWithEnv from env
-func NewAuthWithEnv() IAuth {
+//NewAuthFromEnv from env
+func NewAuthFromEnv() IAuth {
 	return &env{}
 }
 
