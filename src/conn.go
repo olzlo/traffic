@@ -17,7 +17,7 @@ func NewConn(c net.Conn, p *Cipher) *Conn {
 	}
 }
 
-func Copy(src *Conn, dst net.Conn) (err error) {
+func Copy(dst net.Conn, src *Conn) (err error) {
 	b := leakyBuf.Get()
 	_, err = io.CopyBuffer(dst, src, b)
 	leakyBuf.Put(b)

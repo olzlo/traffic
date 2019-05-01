@@ -8,6 +8,8 @@ import (
 	tr "traffic/src"
 )
 
+
+
 type command struct {
 	LocalPort  string
 	Redis      string
@@ -29,7 +31,7 @@ func main() {
 	flag.BoolVar(&comm.Debug, "d", false, "debug mode")
 	flag.Parse()
 
-	if comm.Debug == false {
+	if comm.Debug == true {
 		tr.Logger.Debug("debug mode")
 		tr.EnableDebug()
 	}
@@ -40,6 +42,11 @@ func main() {
 		tr.Logger.Debug("authenticate user from redis")
 		auth = tr.NewAuthFromRds()
 	}
+
+	if len(comm.Prometheus) > 0 {
+		tr.EnableMetrics(comm.Prometheus)
+	}
+
 	var ok bool
 	if sharedkey, ok = auth.SharedKey(); ok {
 		tr.Logger.Fatal("must set shared key")
@@ -54,12 +61,12 @@ func main() {
 func tcpListen() {
 	ln, err := net.Listen("tcp", comm.LocalPort)
 	if err != nil {
-		panic(err)
+		tr.Logger.Fatal(err)
 	}
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
-			panic(err)
+			tr.Logger.Fatal(err)
 		}
 		go handleConnection(tr.NewConn(conn, &tr.Cipher{
 			Key: sharedkey,
@@ -80,17 +87,31 @@ func (cm *connStatManage) isConnected(conn *tr.Conn) bool {
 		cm.connected[addr]++
 		return true
 	}
-	if handshake(conn) {
+	if cryptoUpdate(conn) {
 		cm.connected[addr] = 1
 	}
 	return false
 }
 
-func handshake(conn *tr.Conn) bool {
+type pkgType int
+
+const (
+	handShake pkgType = iota
+	data
+)
+
+
+
+
+func cryptoUpdate(conn *tr.Conn) bool {
+	
 
 	return false
 }
-func getRequest(conn *tr.Conn) (dst string, ok bool) {
+
+func getdstConn(conn *tr.Conn) (dst net.Conn, err error) {
+
+
 
 	return
 }
@@ -100,6 +121,12 @@ func handleConnection(conn *tr.Conn) {
 	if cmanage.isConnected(conn) == false {
 		return
 	}
-	//dst,bool:=getRequest(conn)
-
+	dst, err := getdstConn(conn)
+	if err != nil {
+		tr.Logger.Fatal(err)
+	}
+	err = tr.Copy(dst, conn)
+	if err != nil {
+		tr.Logger.Fatal(err)
+	}
 }
