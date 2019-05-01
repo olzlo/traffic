@@ -8,8 +8,6 @@ import (
 	tr "traffic/src"
 )
 
-
-
 type command struct {
 	LocalPort  string
 	Redis      string
@@ -100,18 +98,12 @@ const (
 	data
 )
 
-
-
-
 func cryptoUpdate(conn *tr.Conn) bool {
-	
 
 	return false
 }
 
 func getdstConn(conn *tr.Conn) (dst net.Conn, err error) {
-
-
 
 	return
 }
@@ -123,10 +115,17 @@ func handleConnection(conn *tr.Conn) {
 	}
 	dst, err := getdstConn(conn)
 	if err != nil {
-		tr.Logger.Fatal(err)
+		tr.Logger.Info(err)
 	}
-	err = tr.Copy(dst, conn)
+	defer dst.Close()
+	go func() {
+		err := tr.Copy(dst, conn)
+		if err != nil {
+			tr.Logger.Info(err)
+		}
+	}()
+	err = tr.Copy(conn, dst)
 	if err != nil {
-		tr.Logger.Fatal(err)
+		tr.Logger.Info(err)
 	}
 }

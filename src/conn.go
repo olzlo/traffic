@@ -17,7 +17,7 @@ func NewConn(c net.Conn, p *Cipher) *Conn {
 	}
 }
 
-func Copy(dst net.Conn, src *Conn) (err error) {
+func Copy(dst io.Writer, src io.Reader) (err error) {
 	b := leakyBuf.Get()
 	_, err = io.CopyBuffer(dst, src, b)
 	leakyBuf.Put(b)
@@ -39,8 +39,7 @@ func (c *Conn) Read(b []byte) (n int, err error) {
 }
 
 func (c *Conn) RemoteIP() (ip string) {
-	tc := c.Conn.(*net.TCPConn)
-	ip = tc.RemoteAddr().String()
+	ip = c.Conn.RemoteAddr().String()
 	ip, _, _ = net.SplitHostPort(ip)
 	return
 }
