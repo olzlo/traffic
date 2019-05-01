@@ -4,7 +4,6 @@ import (
 	"flag"
 	"github.com/sirupsen/logrus"
 	"net"
-	"strings"
 	"sync"
 	tr "traffic/src"
 )
@@ -17,9 +16,10 @@ type command struct {
 }
 
 var (
-	comm    command
-	auth    tr.IAuth
-	cmanage connStatManage
+	comm      command
+	auth      tr.IAuth
+	cmanage   connStatManage
+	sharedkey []byte
 )
 
 func main() {
@@ -40,6 +40,10 @@ func main() {
 		tr.Logger.Debug("authenticate user from redis")
 		auth = tr.NewAuthFromRds()
 	}
+	var ok bool
+	if sharedkey, ok = auth.SharedKey(); ok {
+		tr.Logger.Fatal("must set shared key")
+	}
 
 	tr.Logger.WithFields(logrus.Fields{
 		"port": comm.LocalPort,
@@ -57,7 +61,9 @@ func tcpListen() {
 		if err != nil {
 			panic(err)
 		}
-		go handleConnection(tr.NewConn(conn,&tr.Cipher{}))
+		go handleConnection(tr.NewConn(conn, &tr.Cipher{
+			Key: sharedkey,
+		}))
 	}
 }
 
@@ -66,17 +72,17 @@ type connStatManage struct {
 	connected map[string]int
 }
 
-func (cm *connStatManage) isConnected(conn net.Conn) bool {
-	tc := conn.(*net.TCPConn)
-	addr := tc.RemoteAddr().String()
-	addr = addr[:strings.Index(addr, ":")]
+func (cm *connStatManage) isConnected(conn *tr.Conn) bool {
+	addr := conn.RemoteIP()
 	cm.m.Lock()
 	defer cm.m.Unlock()
 	if _, ok := cm.connected[addr]; ok {
 		cm.connected[addr]++
 		return true
 	}
-	cm.connected[addr] = 1
+	if handshake(conn) {
+		cm.connected[addr] = 1
+	}
 	return false
 }
 
@@ -84,11 +90,16 @@ func handshake(conn *tr.Conn) bool {
 
 	return false
 }
+func getRequest(conn *tr.Conn) (dst string, ok bool) {
+
+	return
+}
 
 func handleConnection(conn *tr.Conn) {
 	defer conn.Close()
-	if cmanage.isConnected(conn) == false && handshake(conn) == false {
+	if cmanage.isConnected(conn) == false {
 		return
 	}
+	//dst,bool:=getRequest(conn)
 
 }
