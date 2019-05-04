@@ -2,10 +2,11 @@ package main
 
 import (
 	"flag"
-	"github.com/sirupsen/logrus"
 	"net"
 	"sync"
 	tr "traffic/src"
+
+	"github.com/sirupsen/logrus"
 )
 
 type command struct {
@@ -94,9 +95,17 @@ func (cm *connStatManage) isConnected(conn *tr.Conn) bool {
 type pkgType int
 
 const (
-	handShake pkgType = iota
-	data
+	MetaPkg pkgType = iota
+	DataPkg
 )
+
+/*  MetaPkg header info
++---------+-----------+-----------+----------------------+---------------+-----------+----------+
+| version |  pkg_type | sock_type |  data_len (udp only) | dst_addr_type |  dst_addr | dst_port |
++---------+-----------+-----------+----------------------+---------------+-----------+----------+
+|    1    |      1    |    1      |          2           |       1       |    val    |    2     |
++---------+-----------+-----------+----------------------+---------------+-----------+----------+
+*/
 
 func cryptoUpdate(conn *tr.Conn) bool {
 
