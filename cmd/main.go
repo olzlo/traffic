@@ -14,6 +14,7 @@ type command struct {
 	Redis      string
 	Prometheus string
 	Debug      bool
+	KcpMode    bool
 }
 
 var (
@@ -25,8 +26,9 @@ var (
 
 func main() {
 	flag.StringVar(&comm.LocalPort, "l", ":10020", "listen port")
-	flag.StringVar(&comm.Redis, "rds", "", "redis address")
+	flag.StringVar(&comm.Redis, "redis", "", "redis address")
 	flag.StringVar(&comm.Prometheus, "pms", "", "prometheus address")
+	flag.BoolVar(&comm.KcpMode, "kcp", false, "listen on kcp mode")
 	flag.BoolVar(&comm.Debug, "d", false, "debug mode")
 	flag.Parse()
 
@@ -39,7 +41,7 @@ func main() {
 		auth = tr.NewAuthFromEnv()
 	} else {
 		tr.Logger.Debug("authenticate user from redis")
-		auth = tr.NewAuthFromRds()
+		auth = tr.NewAuthFromRedis()
 	}
 
 	if len(comm.Prometheus) > 0 {
@@ -51,10 +53,21 @@ func main() {
 		tr.Logger.Fatal("must set shared key")
 	}
 
-	tr.Logger.WithFields(logrus.Fields{
-		"port": comm.LocalPort,
-	}).Debug("tcp listen")
-	tcpListen()
+	if comm.KcpMode == false {
+		tr.Logger.WithFields(logrus.Fields{
+			"port": comm.LocalPort,
+		}).Debug("tcp listen")
+		tcpListen()
+	} else {
+		tr.Logger.WithFields(logrus.Fields{
+			"port": comm.LocalPort,
+		}).Debug("kcp listen")
+		kcpListen()
+	}
+}
+
+func kcpListen() {
+
 }
 
 func tcpListen() {

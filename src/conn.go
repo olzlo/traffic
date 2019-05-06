@@ -18,9 +18,9 @@ func NewConn(c net.Conn, p *Cipher) *Conn {
 }
 
 func Copy(dst io.Writer, src io.Reader) (err error) {
-	b := leakyBuf.Get()
+	b := bufPool.Get()
 	_, err = io.CopyBuffer(dst, src, b)
-	leakyBuf.Put(b)
+	bufPool.Put(b)
 	return
 }
 

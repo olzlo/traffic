@@ -13,8 +13,8 @@ type IAuth interface {
 	User(string) ([]byte, bool)
 }
 
-//NewAuthFromRds from redis
-func NewAuthFromRds() IAuth {
+//NewAuthFromRedis from redis
+func NewAuthFromRedis() IAuth {
 	return nil
 }
 
