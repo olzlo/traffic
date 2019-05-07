@@ -6,6 +6,7 @@ import (
 	"sync"
 	tr "traffic/src"
 
+	"github.com/aead/chacha20"
 	"github.com/sirupsen/logrus"
 )
 
@@ -18,10 +19,9 @@ type command struct {
 }
 
 var (
-	comm      command
-	auth      tr.IAuth
-	cmanage   connStatManage
-	sharedkey []byte
+	comm     command
+	auth     tr.IAuth
+	connMgmt connStatManage
 )
 
 func main() {
@@ -44,34 +44,24 @@ func main() {
 		auth = tr.NewAuthFromRedis()
 	}
 
-	if len(comm.Prometheus) > 0 {
-		tr.EnableMetrics(comm.Prometheus)
-	}
-
-	var ok bool
-	if sharedkey, ok = auth.SharedKey(); ok {
-		tr.Logger.Fatal("must set shared key")
-	}
-
 	if comm.KcpMode == false {
 		tr.Logger.WithFields(logrus.Fields{
 			"port": comm.LocalPort,
 		}).Debug("tcp listen")
-		tcpListen()
+		tcpListen(auth)
 	} else {
 		tr.Logger.WithFields(logrus.Fields{
 			"port": comm.LocalPort,
 		}).Debug("kcp listen")
-		kcpListen()
+		kcpListen(auth)
 	}
 }
 
-func kcpListen() {
-	
+func kcpListen(auth tr.IAuth) {
 
 }
 
-func tcpListen() {
+func tcpListen(auth tr.IAuth) {
 	ln, err := net.Listen("tcp", comm.LocalPort)
 	if err != nil {
 		tr.Logger.Fatal(err)
@@ -81,9 +71,7 @@ func tcpListen() {
 		if err != nil {
 			tr.Logger.Fatal(err)
 		}
-		go handleConnection(tr.NewConn(conn, &tr.Cipher{
-			Key: sharedkey,
-		}))
+		go handleConnection(tr.NewEncryptConn(conn, auth.SharedKey(), chacha20.NewCipher))
 	}
 }
 
@@ -92,18 +80,27 @@ type connStatManage struct {
 	connected map[string]int
 }
 
-func (cm *connStatManage) isConnected(conn *tr.Conn) bool {
+func (cm *connStatManage) AddCounter(conn *tr.Conn) (err error) {
 	addr := conn.RemoteIP()
 	cm.m.Lock()
 	defer cm.m.Unlock()
 	if _, ok := cm.connected[addr]; ok {
 		cm.connected[addr]++
-		return true
+		return
 	}
-	if cryptoUpdate(conn) {
+	if err = cryptoUpdate(conn); err == nil {
 		cm.connected[addr] = 1
 	}
-	return false
+	return
+}
+
+func (cm *connStatManage) DownCounter(conn *tr.Conn) {
+	addr := conn.RemoteIP()
+	cm.m.Lock()
+	defer cm.m.Unlock()
+	if _, ok := cm.connected[addr]; ok {
+		cm.connected[addr]--
+	}
 }
 
 type pkgType int
@@ -121,9 +118,9 @@ const (
 +---------+-----------+-----------+----------------------+---------------+-----------+----------+
 */
 
-func cryptoUpdate(conn *tr.Conn) bool {
+func cryptoUpdate(conn *tr.Conn) error {
 
-	return false
+	return nil
 }
 
 func getdstConn(conn *tr.Conn) (dst net.Conn, err error) {
@@ -133,9 +130,11 @@ func getdstConn(conn *tr.Conn) (dst net.Conn, err error) {
 
 func handleConnection(conn *tr.Conn) {
 	defer conn.Close()
-	if cmanage.isConnected(conn) == false {
+	if err := connMgmt.AddCounter(conn); err != nil {
+		tr.Logger.Error(err)
 		return
 	}
+	defer connMgmt.DownCounter(conn)
 	dst, err := getdstConn(conn)
 	if err != nil {
 		tr.Logger.Info(err)
@@ -151,4 +150,5 @@ func handleConnection(conn *tr.Conn) {
 	if err != nil {
 		tr.Logger.Info(err)
 	}
+
 }

@@ -5,6 +5,8 @@ import (
 )
 
 type Cipher struct {
-	stream cipher.Stream
-	Key    []byte
+	stream    cipher.Stream
+	key       []byte
+	iv        []byte
+	newStream func(key, iv []byte) (cipher.Stream, error)
 }

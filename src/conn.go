@@ -1,6 +1,7 @@
 package src
 
 import (
+	"crypto/cipher"
 	"io"
 	"net"
 	"time"
@@ -11,9 +12,12 @@ type Conn struct {
 	*Cipher
 }
 
-func NewConn(c net.Conn, p *Cipher) *Conn {
+func NewEncryptConn(c net.Conn, key []byte, stream func(key, iv []byte) (cipher.Stream, error)) *Conn {
 	return &Conn{
-		c, p,
+		c, &Cipher{
+			key:       key,
+			newStream: stream,
+		},
 	}
 }
 

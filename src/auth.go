@@ -1,6 +1,9 @@
 package src
 
 import (
+	"crypto/rand"
+	"encoding/base64"
+	"io"
 	"os"
 	"strings"
 )
@@ -9,7 +12,7 @@ import (
 type IAuth interface {
 	init()
 	//pre-shared key encrypted handshake
-	SharedKey() ([]byte, bool)
+	SharedKey() []byte
 	User(string) ([]byte, bool)
 }
 
@@ -32,9 +35,23 @@ func (e *env) init() {
 
 }
 
-func (e *env) SharedKey() (key []byte, ok bool) {
-	b, ok := os.LookupEnv("TRAFFIC_SHARED")
-	key = []byte(b)
+func randomKeyGen() []byte {
+	key := make([]byte, 95)
+	if _, err := io.ReadFull(rand.Reader, key); err != nil {
+		panic(err)
+	}
+	dst := make([]byte, 128)
+	base64.StdEncoding.Encode(dst, key)
+	return dst
+}
+
+func (e *env) SharedKey() (key []byte) {
+	if b, ok := os.LookupEnv("TRAFFIC_SHARED"); ok {
+		key = []byte(b)
+	} else {
+		key = randomKeyGen()
+		Logger.Info("the pre-shared key has not been set use random key as bellow \n", string(key))
+	}
 	return
 }
 func (e *env) User(uname string) (pwd []byte, ok bool) {
