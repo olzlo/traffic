@@ -8,6 +8,7 @@ import (
 
 	"github.com/aead/chacha20"
 	"github.com/sirupsen/logrus"
+	kcp "github.com/xtaci/kcp-go"
 )
 
 type command struct {
@@ -58,16 +59,40 @@ func main() {
 }
 
 func kcpListen(auth tr.IAuth) {
-
+	block, _ := kcp.NewNoneBlockCrypt(nil)
+	lis, err := kcp.ListenWithOptions(comm.LocalPort, block, 10, 3)
+	if err != nil {
+		tr.Logger.Fatal(err)
+	}
+	if err = lis.SetReadBuffer(4096 * 1024); err != nil {
+		tr.Logger.Fatal(err)
+	}
+	if err = lis.SetWriteBuffer(4096 * 1024); err != nil {
+		tr.Logger.Fatal(err)
+	}
+	for {
+		conn, err := lis.AcceptKCP()
+		if err != nil {
+			tr.Logger.Fatal(err)
+		}
+		conn.SetStreamMode(true)
+		conn.SetWriteDelay(false)
+		//fast
+		conn.SetNoDelay(0, 40, 2, 1)
+		conn.SetMtu(1350)
+		conn.SetWindowSize(1024, 1024)
+		conn.SetACKNoDelay(true)
+		go handleConnection(tr.NewEncryptConn(conn, auth.SharedKey(), chacha20.NewCipher))
+	}
 }
 
 func tcpListen(auth tr.IAuth) {
-	ln, err := net.Listen("tcp", comm.LocalPort)
+	lis, err := net.Listen("tcp", comm.LocalPort)
 	if err != nil {
 		tr.Logger.Fatal(err)
 	}
 	for {
-		conn, err := ln.Accept()
+		conn, err := lis.Accept()
 		if err != nil {
 			tr.Logger.Fatal(err)
 		}
