@@ -1,6 +1,5 @@
 package src
 
-
-func EnableMetrics(addr string){
+func EnableMetrics(addr string) {
 
 }
