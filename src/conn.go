@@ -42,8 +42,8 @@ func (c *Conn) Read(b []byte) (n int, err error) {
 	return
 }
 
-func (c *Conn) RemoteIP() (ip string) {
-	ip = c.Conn.RemoteAddr().String()
+func RemoteIP(conn net.Conn) (ip string) {
+	ip = conn.RemoteAddr().String()
 	ip, _, _ = net.SplitHostPort(ip)
 	return
 }

@@ -54,7 +54,7 @@ func (e *env) SharedKey() (key []byte) {
 	}
 	return
 }
-func (e *env) User(uname string) (pwd []byte, ok bool) {
+func (e *env) GetKey(uname string) (pwd []byte, ok bool) {
 	b, ok := os.LookupEnv("TRAFFIC_USER_" + strings.ToUpper(uname))
 	pwd = []byte(b)
 	return
