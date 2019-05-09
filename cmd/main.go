@@ -43,7 +43,7 @@ func main() {
 		auth = tr.NewAuthFromEnv()
 	} else {
 		tr.Logger.Debug("authenticate user from redis")
-		auth = tr.NewAuthFromRedis()
+		auth = tr.NewAuthFromRedis(comm.Redis)
 	}
 
 	if comm.KcpMode == false {
@@ -128,7 +128,7 @@ func authenticate(conn *tr.Conn) (addr net.Addr, err error) {
 	switch buf[1] {
 	case TCP_PROTO:
 		token := string(buf[2:34])
-		if _, ok := auth.Get(token); ok == false {
+		if ok := auth.IsValid(token); ok == false {
 			return nil, errors.New("unauthorized user token")
 		}
 		l := int(buf[34])
