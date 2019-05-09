@@ -22,9 +22,8 @@ type command struct {
 }
 
 var (
-	comm     command
-	auth     tr.IAuth
-	connMgmt connStatManage
+	comm command
+	auth tr.IAuth
 )
 
 func main() {

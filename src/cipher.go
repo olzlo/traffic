@@ -2,11 +2,35 @@ package src
 
 import (
 	"crypto/cipher"
+	"crypto/rand"
+	"io"
 )
 
 type Cipher struct {
-	stream    cipher.Stream
+	dec       cipher.Stream
+	enc       cipher.Stream
 	key       []byte
-	iv        []byte
 	newStream func(key, iv []byte) (cipher.Stream, error)
+}
+
+func (c *Cipher) initEncrypt() (iv []byte, err error) {
+	iv = make([]byte, 8)
+	if _, err := io.ReadFull(rand.Reader, iv); err != nil {
+		return nil, err
+	}
+	c.enc, err = c.newStream(c.key, iv)
+	return
+}
+
+func (c *Cipher) initDecrypt(iv []byte) (err error) {
+	c.dec, err = c.newStream(c.key, iv)
+	return
+}
+
+func (c *Cipher) encrypt(dst, src []byte) {
+	c.enc.XORKeyStream(dst, src)
+}
+
+func (c *Cipher) decrypt(dst, src []byte) {
+	c.dec.XORKeyStream(dst, src)
 }

@@ -33,12 +33,39 @@ func SetReadTimeout(c net.Conn) {
 }
 
 func (c *Conn) Write(b []byte) (n int, err error) {
-
+	var iv []byte
+	if c.enc == nil {
+		iv, err = c.initEncrypt()
+		if err != nil {
+			return
+		}
+		if n, err = c.Conn.Write(iv); err != nil {
+			return
+		}
+	}
+	cipherData := bufPool.Get()
+	c.encrypt(cipherData, b)
+	n, err = c.Conn.Write(cipherData)
+	bufPool.Put(cipherData)
 	return
 }
 
 func (c *Conn) Read(b []byte) (n int, err error) {
-
+	if c.dec == nil {
+		iv := make([]byte, 8)
+		if _, err = io.ReadFull(c.Conn, iv); err != nil {
+			return
+		}
+		if err = c.initDecrypt(iv); err != nil {
+			return
+		}
+	}
+	cipherData := bufPool.Get()
+	n, err = c.Conn.Read(cipherData)
+	if n > 0 {
+		c.decrypt(b[:n], cipherData[:n])
+	}
+	bufPool.Put(cipherData)
 	return
 }
 
