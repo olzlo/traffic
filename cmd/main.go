@@ -5,6 +5,8 @@ import (
 	"net"
 	tr "traffic/src"
 
+	"errors"
+
 	"github.com/aead/chacha20"
 	"github.com/sirupsen/logrus"
 	kcp "github.com/xtaci/kcp-go"
@@ -49,16 +51,16 @@ func main() {
 		tr.Logger.WithFields(logrus.Fields{
 			"port": comm.LocalPort,
 		}).Debug("tcp listen")
-		tcpListen(auth)
+		tcpListen()
 	} else {
 		tr.Logger.WithFields(logrus.Fields{
 			"port": comm.LocalPort,
 		}).Debug("kcp listen")
-		kcpListen(auth)
+		kcpListen()
 	}
 }
 
-func kcpListen(auth tr.IAuth) {
+func kcpListen() {
 	block, _ := kcp.NewNoneBlockCrypt(nil)
 	lis, err := kcp.ListenWithOptions(comm.LocalPort, block, 10, 3)
 	if err != nil {
@@ -86,7 +88,7 @@ func kcpListen(auth tr.IAuth) {
 	}
 }
 
-func tcpListen(auth tr.IAuth) {
+func tcpListen() {
 	lis, err := net.Listen("tcp", comm.LocalPort)
 	if err != nil {
 		tr.Logger.Fatal(err)
@@ -101,42 +103,76 @@ func tcpListen(auth tr.IAuth) {
 }
 
 /*
-    field             bytes           description
-    ------------------------------------------------------
-	version      |      1        |   record version
-	protocol     |      1        |   layer-4 protocol
-	token        |      32       |   user distinguish
-	dst_len      |      1        |   no more than 262
-	dst_address  |      val      |   form as addr:port
 
+
+
+    field                bytes                 description
+    ------------------------------------------------------------
+	version      |         1            |   record version          0
+	protocol     |         1            |   layer-4 protocol        1
+	token        |         32           |   user distinguish        2
+	dst_len      |         1            |   dst addr len            34
+	dst_address  |  no more than 261    |   form as addr:port
 
 */
-func authenticate(conn *tr.Conn) bool {
 
+const (
+	TCP_PROTO = iota
+	UDP_PROTO
+)
+
+func authenticate(conn *tr.Conn) (addr net.Addr, err error) {
+	buf := make([]byte, 261)
+	if _, err = conn.Read(buf[:35]); err != nil {
+		return
+	}
+	switch buf[1] {
+	case TCP_PROTO:
+		token := string(buf[2:34])
+		if _, ok := auth.Get(token); ok == false {
+			return nil, errors.New("unauthorized user token")
+		}
+		l := int(buf[34])
+		if l > 261 {
+			return nil, errors.New("invalid length of address")
+		}
+
+		if _, err = conn.Read(buf[:l]); err != nil {
+			return
+		}
+		if addr, err = net.ResolveTCPAddr("tcp", string(buf[:l])); err != nil {
+			return
+		}
+	default:
+		err = errors.New("unsupported protocol type")
+	}
+	return
 }
 
 func getdstConn(conn *tr.Conn) (dst net.Conn, err error) {
-
+	addr, err := authenticate(conn)
+	if err != nil {
+		return
+	}
+	dst, err = net.Dial(addr.Network(), addr.String())
 	return
 }
 
 func handleConnection(conn *tr.Conn) {
 	defer conn.Close()
-	if authenticate(conn) {
-		dst, err := getdstConn(conn)
+	dst, err := getdstConn(conn)
+	if err != nil {
+		tr.Logger.Error(err)
+	}
+	defer dst.Close()
+	go func() {
+		err := tr.Copy(dst, conn)
 		if err != nil {
 			tr.Logger.Info(err)
 		}
-		defer dst.Close()
-		go func() {
-			err := tr.Copy(dst, conn)
-			if err != nil {
-				tr.Logger.Info(err)
-			}
-		}()
-		err = tr.Copy(conn, dst)
-		if err != nil {
-			tr.Logger.Info(err)
-		}
+	}()
+	err = tr.Copy(conn, dst)
+	if err != nil {
+		tr.Logger.Info(err)
 	}
 }

@@ -13,7 +13,7 @@ type IAuth interface {
 	init()
 	//pre-shared key encrypted handshake
 	SharedKey() []byte
-	User(string) ([]byte, bool)
+	Get(string) ([]byte, bool)
 }
 
 //NewAuthFromRedis from redis
@@ -54,7 +54,7 @@ func (e *env) SharedKey() (key []byte) {
 	}
 	return
 }
-func (e *env) GetKey(uname string) (pwd []byte, ok bool) {
+func (e *env) Get(uname string) (pwd []byte, ok bool) {
 	b, ok := os.LookupEnv("TRAFFIC_USER_" + strings.ToUpper(uname))
 	pwd = []byte(b)
 	return
