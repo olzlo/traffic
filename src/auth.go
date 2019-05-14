@@ -1,6 +1,7 @@
 package src
 
 import (
+	"crypto/md5"
 	"crypto/rand"
 	"encoding/base64"
 	"io"
@@ -44,6 +45,23 @@ func randomKeyGen(keyLen int) []byte {
 	return dst[:keyLen]
 }
 
+func enforceKeys(unsafe []byte, keyLen int) (key []byte) {
+	key = make([]byte, keyLen)
+	b := make([]byte, md5.BlockSize+len(unsafe))
+	hash := md5.Sum(unsafe)
+
+	copy(b, []byte(hash[:]))
+	copy(b[md5.BlockSize:], unsafe)
+
+	for i := 0; i < keyLen; i++ {
+		key[i] = b[0]
+		hash = md5.Sum(b)
+		copy(b, []byte(hash[:]))
+		copy(b[md5.BlockSize:], unsafe)
+	}
+	return
+}
+
 type redisAuth struct {
 	cli *rds.Client
 }
@@ -53,7 +71,7 @@ func (r *redisAuth) SharedKey() (key []byte) {
 	if err != nil {
 		panic(err)
 	}
-	return []byte(val)
+	return enforceKeys([]byte(val), 32)
 }
 
 func (r *redisAuth) IsValid(uname string) (ok bool) {
@@ -64,14 +82,20 @@ func (r *redisAuth) IsValid(uname string) (ok bool) {
 	return
 }
 
-type envAuth struct{}
+type envAuth struct {
+	key []byte
+}
 
 func (e *envAuth) SharedKey() (key []byte) {
 	if b, ok := os.LookupEnv("TRAFFIC_SHARED"); ok {
 		key = []byte(b)
 	} else {
-		key = randomKeyGen(32)
-		Logger.Info("the pre-shared key has not been set use random key as bellow \n", string(key))
+		if e.key == nil {
+			key = randomKeyGen(16)
+			e.key = enforceKeys(key, 32)
+			Logger.Info("the pre-shared key has not been set use random key as bellow \n", string(key))
+		}
+		return e.key
 	}
 	return
 }
