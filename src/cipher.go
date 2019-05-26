@@ -14,7 +14,7 @@ type Cipher struct {
 }
 
 func (c *Cipher) initEncrypt() (iv []byte, err error) {
-	iv = make([]byte, 8)
+	iv = BufferPool.Get(8)
 	if _, err := io.ReadFull(rand.Reader, iv); err != nil {
 		return nil, err
 	}

@@ -7,6 +7,10 @@ import (
 	"time"
 )
 
+const (
+	TransferBufferSize = 4096
+)
+
 type Conn struct {
 	net.Conn
 	*Cipher
@@ -22,9 +26,9 @@ func NewEncryptConn(c net.Conn, key []byte, stream func(key, iv []byte) (cipher.
 }
 
 func Copy(dst io.Writer, src io.Reader) (err error) {
-	b := bufPool.Get()
-	_, err = io.CopyBuffer(dst, src, b)
-	bufPool.Put(b)
+	b := BufferPool.Get(TransferBufferSize)
+	_, err = CopyBuffer(dst, src, b)
+	BufferPool.Put(b)
 	return
 }
 
@@ -39,20 +43,22 @@ func (c *Conn) Write(b []byte) (n int, err error) {
 		if err != nil {
 			return
 		}
+		defer BufferPool.Put(iv)
 		if n, err = c.Conn.Write(iv); err != nil {
 			return
 		}
 	}
-	cipherData := bufPool.Get()
+	cipherData := BufferPool.Get(TransferBufferSize)
 	c.encrypt(cipherData, b)
 	n, err = c.Conn.Write(cipherData)
-	bufPool.Put(cipherData)
+	BufferPool.Put(cipherData)
 	return
 }
 
 func (c *Conn) Read(b []byte) (n int, err error) {
 	if c.dec == nil {
-		iv := make([]byte, 8)
+		iv := BufferPool.Get(8)
+		defer BufferPool.Put(iv)
 		if _, err = io.ReadFull(c.Conn, iv); err != nil {
 			return
 		}
@@ -60,12 +66,12 @@ func (c *Conn) Read(b []byte) (n int, err error) {
 			return
 		}
 	}
-	cipherData := bufPool.Get()
+	cipherData := BufferPool.Get(TransferBufferSize)
 	n, err = c.Conn.Read(cipherData)
 	if n > 0 {
 		c.decrypt(b[:n], cipherData[:n])
 	}
-	bufPool.Put(cipherData)
+	BufferPool.Put(cipherData)
 	return
 }
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"net"
 	tr "traffic/src"
 
@@ -16,7 +17,7 @@ type command struct {
 	LocalPort  string
 	Redis      string
 	Prometheus string
-	Debug      bool
+	Verbose    bool
 	KcpMode    bool
 	APIServer  string
 }
@@ -31,11 +32,10 @@ func main() {
 	flag.StringVar(&comm.Redis, "redis", "", "redis address")
 	flag.StringVar(&comm.Prometheus, "pms", "", "prometheus address")
 	flag.BoolVar(&comm.KcpMode, "kcp", false, "listen on kcp mode")
-	flag.BoolVar(&comm.Debug, "debug", false, "debug mode")
+	flag.BoolVar(&comm.Verbose, "verbose", false, "verbose mode")
 	flag.Parse()
 
-	if comm.Debug == true {
-		tr.Logger.Debug("debug mode")
+	if comm.Verbose == true {
 		tr.EnableDebug()
 	}
 	if comm.Redis == "" {
@@ -102,17 +102,13 @@ func tcpListen() {
 }
 
 /*
-
-
-
     field                bytes                 description
     ------------------------------------------------------------
-	version      |         1            |   record version          0
+	version      |         1            |   version                 0
 	protocol     |         1            |   layer-4 protocol        1
 	token        |         32           |   user distinguish        2
 	dst_len      |         1            |   dst addr len            34
 	dst_address  |  no more than 261    |   form as addr:port
-
 */
 
 const (
@@ -121,10 +117,16 @@ const (
 )
 
 func authenticate(conn *tr.Conn) (addr net.Addr, err error) {
-	buf := make([]byte, 261)
+	buf := tr.BufferPool.Get(261)
+	defer tr.BufferPool.Put(buf)
+	tr.SetReadTimeout(conn)
 	if _, err = conn.Read(buf[:35]); err != nil {
 		return
 	}
+	if buf[0] != 1 {
+		return nil, fmt.Errorf("client ver: %d not match with server ver 1", buf[0])
+	}
+
 	switch buf[1] {
 	case TCP_PROTO:
 		token := string(buf[2:34])
