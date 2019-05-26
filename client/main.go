@@ -124,10 +124,43 @@ func getRequest(conn net.Conn) (host string, err error) {
 	return
 }
 
-func handleRequest(conn net.Conn) {
-	err := handShake(conn)
+func createServerConn(host string) (conn net.Conn, err error) {
+
+	return
+}
+
+func handleRequest(c net.Conn) {
+	defer c.Close()
+	err := handShake(c)
 	if err != nil {
+		tr.Logger.Info(err)
+	}
+	host, err := getRequest(c)
+	if err != nil {
+		tr.Logger.Info(err)
+	}
+	var res [10]byte
+	//ver
+	res[1] = 5
+	//atype
+	res[4] = 1
+	if _, err = c.Write(res[:]); err != nil {
 		tr.Logger.Fatal(err)
+	}
+	s, err := createServerConn(host)
+	if err != nil {
+		tr.Logger.Info(err)
+	}
+	defer s.Close()
+	go func() {
+		if err := tr.Copy(c, s); err != nil {
+			tr.Logger.Info(err)
+		}
+	}()
+
+	err = tr.Copy(s, c)
+	if err != nil {
+		tr.Logger.Info(err)
 	}
 
 }

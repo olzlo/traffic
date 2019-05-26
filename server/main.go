@@ -167,8 +167,7 @@ func handleConnection(conn *tr.Conn) {
 	}
 	defer dst.Close()
 	go func() {
-		err := tr.Copy(dst, conn)
-		if err != nil {
+		if err := tr.Copy(dst, conn); err != nil {
 			tr.Logger.Info(err)
 		}
 	}()
