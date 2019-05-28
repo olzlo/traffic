@@ -60,15 +60,25 @@ func main() {
 }
 
 func kcpListen() {
+	const (
+		DataShard, ParityShard = 10, 3
+		//normal
+		NoDelay, Interval, Resend, NoCongestion = 0, 30, 2, 1
+		SndWnd, RcvWnd                          = 1024, 1024
+		MTU                                     = 1350
+		SockBuf                                 = 4194304
+		DSCP                                    = 0
+	)
+
 	block, _ := kcp.NewNoneBlockCrypt(nil)
-	lis, err := kcp.ListenWithOptions(comm.LocalPort, block, 10, 3)
+	lis, err := kcp.ListenWithOptions(comm.LocalPort, block, DataShard, ParityShard)
 	if err != nil {
 		tr.Logger.Fatal(err)
 	}
-	if err = lis.SetReadBuffer(4096 * 1024); err != nil {
+	if err = lis.SetReadBuffer(SockBuf); err != nil {
 		tr.Logger.Fatal(err)
 	}
-	if err = lis.SetWriteBuffer(4096 * 1024); err != nil {
+	if err = lis.SetWriteBuffer(SockBuf); err != nil {
 		tr.Logger.Fatal(err)
 	}
 	for {
@@ -76,12 +86,13 @@ func kcpListen() {
 		if err != nil {
 			tr.Logger.Fatal(err)
 		}
+
 		conn.SetStreamMode(true)
 		conn.SetWriteDelay(false)
 		//fast
-		conn.SetNoDelay(0, 40, 2, 1)
-		conn.SetMtu(1350)
-		conn.SetWindowSize(1024, 1024)
+		conn.SetNoDelay(NoDelay, Interval, Resend, NoCongestion)
+		conn.SetMtu(MTU)
+		conn.SetWindowSize(SndWnd, RcvWnd)
 		conn.SetACKNoDelay(true)
 		go handleConnection(tr.NewEncryptConn(conn, auth.SharedKey(), chacha20.NewCipher))
 	}

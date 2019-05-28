@@ -8,31 +8,90 @@ import (
 	"io"
 	"net"
 	tr "traffic/src"
+
+	"github.com/aead/chacha20"
+	kcp "github.com/xtaci/kcp-go"
 )
 
 type command struct {
-	LocalPort, Token string
-	KcpMode, Verbose bool
+	LocalPort, Token, ServerAddr, Key string
+	KcpMode, Verbose                  bool
 }
 
 var (
-	comm command
+	comm        command
+	enKey       []byte
+	connFactory func() (net.Conn, error)
 )
 
 func main() {
 	flag.StringVar(&comm.LocalPort, "local", ":10020", "client listen port")
+	flag.StringVar(&comm.ServerAddr, "server", "", "server address")
 	flag.StringVar(&comm.Token, "token", "", "authenticate token")
+	flag.StringVar(&comm.Key, "key", "", "shared key")
 	flag.BoolVar(&comm.KcpMode, "kcp", false, "kcp mode")
 	flag.BoolVar(&comm.Verbose, "verbose", false, "verbose mode")
 	flag.Parse()
+
+	if comm.ServerAddr == "" {
+		tr.Logger.Fatal("server address must specified")
+	}
 
 	if comm.Token == "" {
 		tr.Logger.Fatal("client must specify token")
 	}
 
-	if comm.Verbose == true {
+	if comm.Key == "" {
+		tr.Logger.Fatal("client must specify key")
+	} else {
+		enKey = tr.EnforceKeys([]byte(comm.Key), 32)
+	}
+	if comm.Verbose {
 		tr.EnableDebug()
 	}
+	if comm.KcpMode {
+		connFactory = func() (net.Conn, error) {
+			const (
+				DataShard, ParityShard = 10, 3
+				//normal
+				NoDelay, Interval, Resend, NoCongestion = 0, 30, 2, 1
+				SndWnd, RcvWnd                          = 1024, 1024
+				MTU                                     = 1350
+				SockBuf                                 = 4194304
+				DSCP                                    = 0
+			)
+			block, _ := kcp.NewNoneBlockCrypt(nil)
+			conn, err := kcp.DialWithOptions(comm.ServerAddr, block, DataShard, ParityShard)
+			if err != nil {
+				return nil, err
+			}
+			conn.SetStreamMode(true)
+			conn.SetWriteDelay(false)
+			conn.SetNoDelay(NoDelay, Interval, Resend, NoCongestion)
+			conn.SetWindowSize(SndWnd, RcvWnd)
+			conn.SetMtu(MTU)
+			conn.SetACKNoDelay(true)
+
+			if err := conn.SetDSCP(DSCP); err != nil {
+				return nil, err
+			}
+			if err := conn.SetReadBuffer(SockBuf); err != nil {
+				return nil, err
+			}
+			if err := conn.SetWriteBuffer(SockBuf); err != nil {
+				return nil, err
+			}
+			return tr.NewEncryptConn(conn, enKey, chacha20.NewCipher), nil
+		}
+	} else {
+		connFactory = func() (conn net.Conn, err error) {
+			if conn, err = net.Dial("tcp", comm.ServerAddr); err != nil {
+				return
+			}
+			return tr.NewEncryptConn(conn, enKey, chacha20.NewCipher), nil
+		}
+	}
+
 	tr.Logger.Info("sock5 server listen at :", comm.LocalPort)
 	tcpListen()
 }
@@ -125,7 +184,21 @@ func getRequest(conn net.Conn) (host string, err error) {
 }
 
 func createServerConn(host string) (conn net.Conn, err error) {
+	if conn, err = connFactory(); err != nil {
+		return
+	}
+	buf := tr.BufferPool.Get(512)
+	defer tr.BufferPool.Put(buf)
+	//ver
+	buf[0] = 1
+	//proto
+	buf[1] = 1
 
+	copy(buf[2:34], comm.Token)
+	buf[35] = byte(len(host))
+	copy(buf[36:], host)
+
+	_, err = conn.Write(buf)
 	return
 }
 
@@ -144,6 +217,7 @@ func handleRequest(c net.Conn) {
 	res[1] = 5
 	//atype
 	res[4] = 1
+	//replies
 	if _, err = c.Write(res[:]); err != nil {
 		tr.Logger.Fatal(err)
 	}

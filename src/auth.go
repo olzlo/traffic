@@ -45,7 +45,7 @@ func randomKeyGen(keyLen int) []byte {
 	return dst[:keyLen]
 }
 
-func enforceKeys(unsafe []byte, keyLen int) (key []byte) {
+func EnforceKeys(unsafe []byte, keyLen int) (key []byte) {
 	key = make([]byte, keyLen)
 	b := make([]byte, md5.BlockSize+len(unsafe))
 	hash := md5.Sum(unsafe)
@@ -71,7 +71,7 @@ func (r *redisAuth) SharedKey() (key []byte) {
 	if err != nil {
 		panic(err)
 	}
-	return enforceKeys([]byte(val), 32)
+	return EnforceKeys([]byte(val), 32)
 }
 
 func (r *redisAuth) IsValid(uname string) (ok bool) {
@@ -92,7 +92,7 @@ func (e *envAuth) SharedKey() (key []byte) {
 	} else {
 		if e.key == nil {
 			key = randomKeyGen(16)
-			e.key = enforceKeys(key, 32)
+			e.key = EnforceKeys(key, 32)
 			Logger.Info("the pre-shared key has not been set use random key as bellow \n", string(key))
 		}
 		return e.key
