@@ -51,34 +51,25 @@ func main() {
 	}
 	if comm.KcpMode {
 		connFactory = func() (net.Conn, error) {
-			const (
-				DataShard, ParityShard = 10, 3
-				//normal
-				NoDelay, Interval, Resend, NoCongestion = 0, 30, 2, 1
-				SndWnd, RcvWnd                          = 1024, 1024
-				MTU                                     = 1350
-				SockBuf                                 = 4194304
-				DSCP                                    = 0
-			)
 			block, _ := kcp.NewNoneBlockCrypt(nil)
-			conn, err := kcp.DialWithOptions(comm.ServerAddr, block, DataShard, ParityShard)
+			conn, err := kcp.DialWithOptions(comm.ServerAddr, block, tr.DataShard, tr.ParityShard)
 			if err != nil {
 				return nil, err
 			}
 			conn.SetStreamMode(true)
 			conn.SetWriteDelay(false)
-			conn.SetNoDelay(NoDelay, Interval, Resend, NoCongestion)
-			conn.SetWindowSize(SndWnd, RcvWnd)
-			conn.SetMtu(MTU)
+			conn.SetNoDelay(tr.NoDelay, tr.Interval, tr.Resend, tr.NoCongestion)
+			conn.SetWindowSize(tr.SndWnd, tr.RcvWnd)
+			conn.SetMtu(tr.MTU)
 			conn.SetACKNoDelay(true)
 
-			if err := conn.SetDSCP(DSCP); err != nil {
+			if err := conn.SetDSCP(tr.DSCP); err != nil {
 				return nil, err
 			}
-			if err := conn.SetReadBuffer(SockBuf); err != nil {
+			if err := conn.SetReadBuffer(tr.SockBuf); err != nil {
 				return nil, err
 			}
-			if err := conn.SetWriteBuffer(SockBuf); err != nil {
+			if err := conn.SetWriteBuffer(tr.SockBuf); err != nil {
 				return nil, err
 			}
 			return tr.NewEncryptConn(conn, enKey, chacha20.NewCipher), nil
@@ -101,26 +92,30 @@ func tcpListen() {
 	if err != nil {
 		tr.Logger.Fatal(err)
 	}
-	conn, err := lis.Accept()
-	if err != nil {
-		tr.Logger.Fatal(err)
+	for {
+		conn, err := lis.Accept()
+		if err != nil {
+			tr.Logger.Fatal(err)
+		}
+		tr.Logger.Debug("new client from ", conn.RemoteAddr())
+		go handleRequest(conn)
 	}
-	go handleRequest(conn)
 }
 
 func handShake(conn net.Conn) (err error) {
-	buf := make([]byte, 258)
+	buf := make([]byte, 255)
 	tr.SetReadTimeout(conn)
 	//sock5 defined by rfc1928
-	if _, err = io.ReadAtLeast(conn, buf, 2); err != nil {
+	if _, err = io.ReadFull(conn, buf[:2]); err != nil {
 		return
 	}
 	if buf[0] != 5 {
 		return errors.New("sock version mismatch")
 	}
 	nmethod := int(buf[1])
+	tr.Logger.Debug("nmethod:", nmethod)
 	if nmethod > 0 { // has more methods to read, rare case
-		if _, err = io.ReadFull(conn, buf[2:2+nmethod]); err != nil {
+		if _, err = io.ReadFull(conn, buf[:nmethod]); err != nil {
 			return
 		}
 	}
@@ -157,8 +152,11 @@ func handShake(conn net.Conn) (err error) {
 
 func getRequest(conn net.Conn) (host string, err error) {
 	buf := tr.BufferPool.Get(262)
+	if _, err = io.ReadFull(conn, buf[:5]); err != nil {
+		return
+	}
 	if buf[0] != 5 {
-		err = errors.New("client socks version mismatch")
+		err = fmt.Errorf("client socks version %d mismatch", buf[0])
 		return
 	}
 	if buf[1] != 1 {
@@ -167,6 +165,9 @@ func getRequest(conn net.Conn) (host string, err error) {
 	}
 	switch buf[3] {
 	case 1:
+		if _, err = io.ReadFull(conn, buf[5:10]); err != nil {
+			return
+		}
 		addr := &net.TCPAddr{
 			IP:   net.IPv4(buf[4], buf[5], buf[6], buf[7]),
 			Port: int(binary.BigEndian.Uint16(buf[8:10])),
@@ -174,7 +175,10 @@ func getRequest(conn net.Conn) (host string, err error) {
 		host = addr.String()
 	case 3:
 		dmlen := buf[4]
-		port := int(binary.BigEndian.Uint16(buf[dmlen+5 : dmlen+5+2]))
+		if _, err = io.ReadFull(conn, buf[5:dmlen+7]); err != nil {
+			return
+		}
+		port := int(binary.BigEndian.Uint16(buf[dmlen+5 : dmlen+7]))
 		host = fmt.Sprintf("%s:%d", string(buf[5:dmlen+5]), port)
 	default:
 		err = errors.New("address type not support")
@@ -192,13 +196,14 @@ func createServerConn(host string) (conn net.Conn, err error) {
 	//ver
 	buf[0] = 1
 	//proto
-	buf[1] = 1
-
-	copy(buf[2:34], comm.Token)
+	buf[1] = tr.TCP_PROTO
+	//token length
+	buf[2] = byte(len(comm.Token))
+	copy(buf[3:35], comm.Token)
 	buf[35] = byte(len(host))
 	copy(buf[36:], host)
 
-	_, err = conn.Write(buf)
+	_, err = conn.Write(buf[:len(host)+36])
 	return
 }
 
@@ -206,12 +211,15 @@ func handleRequest(c net.Conn) {
 	defer c.Close()
 	err := handShake(c)
 	if err != nil {
-		tr.Logger.Info(err)
+		tr.Logger.Error(err)
+		return
 	}
 	host, err := getRequest(c)
 	if err != nil {
-		tr.Logger.Info(err)
+		tr.Logger.Error(err)
+		return
 	}
+	tr.Logger.Debug("desired destination address :", host)
 	var res [10]byte
 	//ver
 	res[1] = 5
@@ -223,7 +231,8 @@ func handleRequest(c net.Conn) {
 	}
 	s, err := createServerConn(host)
 	if err != nil {
-		tr.Logger.Info(err)
+		tr.Logger.Error(err)
+		return
 	}
 	defer s.Close()
 	go func() {

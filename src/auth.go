@@ -29,7 +29,15 @@ func NewAuthFromRedis(addr string) IAuth {
 
 //NewAuthFromEnv from env
 func NewAuthFromEnv() IAuth {
-	return &envAuth{}
+	e := &envAuth{}
+	if b, ok := os.LookupEnv("TRAFFIC_SHARED"); ok {
+		e.key = EnforceKeys([]byte(b), 32)
+	} else {
+		key := randomKeyGen(16)
+		e.key = EnforceKeys(key, 32)
+		Logger.Info("random pre-shared key : ", string(key))
+	}
+	return e
 }
 
 var _ IAuth = &envAuth{}
@@ -74,8 +82,8 @@ func (r *redisAuth) SharedKey() (key []byte) {
 	return EnforceKeys([]byte(val), 32)
 }
 
-func (r *redisAuth) IsValid(uname string) (ok bool) {
-	ok, err := r.cli.SIsMember("traffic:uset", uname).Result()
+func (r *redisAuth) IsValid(token string) (ok bool) {
+	ok, err := r.cli.SIsMember("traffic:token", token).Result()
 	if err != nil {
 		panic(err)
 	}
@@ -86,20 +94,13 @@ type envAuth struct {
 	key []byte
 }
 
-func (e *envAuth) SharedKey() (key []byte) {
+func (e *envAuth) SharedKey() []byte {
 	if b, ok := os.LookupEnv("TRAFFIC_SHARED"); ok {
-		key = []byte(b)
-	} else {
-		if e.key == nil {
-			key = randomKeyGen(16)
-			e.key = EnforceKeys(key, 32)
-			Logger.Info("the pre-shared key has not been set use random key as bellow \n", string(key))
-		}
-		return e.key
+		e.key = EnforceKeys([]byte(b), 32)
 	}
-	return
+	return e.key
 }
-func (e *envAuth) IsValid(uname string) (ok bool) {
-	_, ok = os.LookupEnv("TRAFFIC_USER_" + strings.ToUpper(uname))
+func (e *envAuth) IsValid(token string) (ok bool) {
+	_, ok = os.LookupEnv("TRAFFIC_USER_" + strings.ToUpper(token))
 	return
 }

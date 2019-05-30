@@ -7,5 +7,6 @@ import (
 var Logger = logrus.New()
 
 func EnableDebug() {
+	Logger.SetReportCaller(true)
 	Logger.SetLevel(logrus.DebugLevel)
 }

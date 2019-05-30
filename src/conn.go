@@ -14,6 +14,7 @@ const (
 type Conn struct {
 	net.Conn
 	*Cipher
+	Token string
 }
 
 func NewEncryptConn(c net.Conn, key []byte, stream func(key, iv []byte) (cipher.Stream, error)) *Conn {
@@ -21,7 +22,7 @@ func NewEncryptConn(c net.Conn, key []byte, stream func(key, iv []byte) (cipher.
 		c, &Cipher{
 			key:       key,
 			newStream: stream,
-		},
+		}, "",
 	}
 }
 
@@ -50,7 +51,7 @@ func (c *Conn) Write(b []byte) (n int, err error) {
 	}
 	cipherData := BufferPool.Get(TransferBufferSize)
 	c.encrypt(cipherData, b)
-	n, err = c.Conn.Write(cipherData)
+	n, err = c.Conn.Write(cipherData[:len(b)])
 	BufferPool.Put(cipherData)
 	return
 }
@@ -67,7 +68,7 @@ func (c *Conn) Read(b []byte) (n int, err error) {
 		}
 	}
 	cipherData := BufferPool.Get(TransferBufferSize)
-	n, err = c.Conn.Read(cipherData)
+	n, err = c.Conn.Read(cipherData[:len(b)])
 	if n > 0 {
 		c.decrypt(b[:n], cipherData[:n])
 	}

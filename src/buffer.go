@@ -13,12 +13,15 @@ var BufferPool = &bufferPool{
 
 type bufferPool struct {
 	p map[int]*sync.Pool
+	m sync.RWMutex
 }
 
 func (b *bufferPool) Get(size int) []byte {
 	if pool, ok := b.p[size]; ok {
 		return pool.Get().([]byte)
 	}
+	b.m.Lock()
+	defer b.m.Unlock()
 	b.p[size] = &sync.Pool{
 		New: func() interface{} {
 			return make([]byte, size)
@@ -31,6 +34,8 @@ func (b *bufferPool) Put(buf []byte) {
 	if pool, ok := b.p[len(buf)]; ok {
 		pool.Put(buf)
 	} else {
+		b.m.Lock()
+		defer b.m.Unlock()
 		b.p[len(buf)] = &sync.Pool{
 			New: func() interface{} {
 				return make([]byte, len(buf))

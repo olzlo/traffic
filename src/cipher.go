@@ -10,7 +10,7 @@ type Cipher struct {
 	dec       cipher.Stream
 	enc       cipher.Stream
 	key       []byte
-	newStream func(key, iv []byte) (cipher.Stream, error)
+	newStream func(iv, key []byte) (cipher.Stream, error)
 }
 
 func (c *Cipher) initEncrypt() (iv []byte, err error) {
@@ -18,12 +18,12 @@ func (c *Cipher) initEncrypt() (iv []byte, err error) {
 	if _, err := io.ReadFull(rand.Reader, iv); err != nil {
 		return nil, err
 	}
-	c.enc, err = c.newStream(c.key, iv)
+	c.enc, err = c.newStream(iv, c.key)
 	return
 }
 
 func (c *Cipher) initDecrypt(iv []byte) (err error) {
-	c.dec, err = c.newStream(c.key, iv)
+	c.dec, err = c.newStream(iv, c.key)
 	return
 }
 

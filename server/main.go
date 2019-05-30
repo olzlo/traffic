@@ -9,7 +9,6 @@ import (
 	"errors"
 
 	"github.com/aead/chacha20"
-	"github.com/sirupsen/logrus"
 	kcp "github.com/xtaci/kcp-go"
 )
 
@@ -47,38 +46,24 @@ func main() {
 	}
 
 	if comm.KcpMode == false {
-		tr.Logger.WithFields(logrus.Fields{
-			"port": comm.LocalPort,
-		}).Debug("tcp listen")
+		tr.Logger.Debug("tcp listen port ", comm.LocalPort)
 		tcpListen()
 	} else {
-		tr.Logger.WithFields(logrus.Fields{
-			"port": comm.LocalPort,
-		}).Debug("kcp listen")
+		tr.Logger.Debug("kcp listen port ", comm.LocalPort)
 		kcpListen()
 	}
 }
 
 func kcpListen() {
-	const (
-		DataShard, ParityShard = 10, 3
-		//normal
-		NoDelay, Interval, Resend, NoCongestion = 0, 30, 2, 1
-		SndWnd, RcvWnd                          = 1024, 1024
-		MTU                                     = 1350
-		SockBuf                                 = 4194304
-		DSCP                                    = 0
-	)
-
 	block, _ := kcp.NewNoneBlockCrypt(nil)
-	lis, err := kcp.ListenWithOptions(comm.LocalPort, block, DataShard, ParityShard)
+	lis, err := kcp.ListenWithOptions(comm.LocalPort, block, tr.DataShard, tr.ParityShard)
 	if err != nil {
 		tr.Logger.Fatal(err)
 	}
-	if err = lis.SetReadBuffer(SockBuf); err != nil {
+	if err = lis.SetReadBuffer(tr.SockBuf); err != nil {
 		tr.Logger.Fatal(err)
 	}
-	if err = lis.SetWriteBuffer(SockBuf); err != nil {
+	if err = lis.SetWriteBuffer(tr.SockBuf); err != nil {
 		tr.Logger.Fatal(err)
 	}
 	for {
@@ -90,9 +75,9 @@ func kcpListen() {
 		conn.SetStreamMode(true)
 		conn.SetWriteDelay(false)
 		//fast
-		conn.SetNoDelay(NoDelay, Interval, Resend, NoCongestion)
-		conn.SetMtu(MTU)
-		conn.SetWindowSize(SndWnd, RcvWnd)
+		conn.SetNoDelay(tr.NoDelay, tr.Interval, tr.Resend, tr.NoCongestion)
+		conn.SetMtu(tr.MTU)
+		conn.SetWindowSize(tr.SndWnd, tr.RcvWnd)
 		conn.SetACKNoDelay(true)
 		go handleConnection(tr.NewEncryptConn(conn, auth.SharedKey(), chacha20.NewCipher))
 	}
@@ -108,30 +93,27 @@ func tcpListen() {
 		if err != nil {
 			tr.Logger.Fatal(err)
 		}
+		tr.Logger.Debug("remote client accept ", conn.RemoteAddr())
 		go handleConnection(tr.NewEncryptConn(conn, auth.SharedKey(), chacha20.NewCipher))
 	}
 }
 
 /*
-    field                bytes                 description
-    ------------------------------------------------------------
-	version      |         1            |   version                 0
-	protocol     |         1            |   layer-4 protocol        1
-	token        |         32           |   user distinguish        2
-	dst_len      |         1            |   dst addr len            34
+    field                bytes                 description         index
+    ------------------------------------------------------------------------
+	version      |         1            |   version              |   0
+	protocol     |         1            |   layer-4 protocol     |   1
+	token_len    |         1            |   token len            |   2
+	token        |         32           |   user distinguish     |   3
+	dst_len      |         1            |   dst addr len         |   35
 	dst_address  |  no more than 261    |   form as addr:port
 */
-
-const (
-	TCP_PROTO = iota
-	UDP_PROTO
-)
 
 func authenticate(conn *tr.Conn) (addr net.Addr, err error) {
 	buf := tr.BufferPool.Get(261)
 	defer tr.BufferPool.Put(buf)
 	tr.SetReadTimeout(conn)
-	if _, err = conn.Read(buf[:35]); err != nil {
+	if _, err = conn.Read(buf[:36]); err != nil {
 		return
 	}
 	if buf[0] != 1 {
@@ -139,20 +121,24 @@ func authenticate(conn *tr.Conn) (addr net.Addr, err error) {
 	}
 
 	switch buf[1] {
-	case TCP_PROTO:
-		token := string(buf[2:34])
-		if ok := auth.IsValid(token); ok == false {
-			return nil, errors.New("unauthorized user token")
+	case tr.TCP_PROTO:
+		tLen := int(buf[2])
+		if tLen > 32 {
+			return nil, fmt.Errorf("token length %d overflow", tLen)
 		}
-		l := int(buf[34])
-		if l > 261 {
+		token := string(buf[3 : 3+tLen])
+		if ok := auth.IsValid(token); !ok {
+			return nil, fmt.Errorf("unauthorized user token %s", token)
+		}
+		conn.Token = token
+		dstLen := int(buf[35])
+		if dstLen > 261 {
 			return nil, errors.New("invalid length of address")
 		}
-
-		if _, err = conn.Read(buf[:l]); err != nil {
+		if _, err = conn.Read(buf[:dstLen]); err != nil {
 			return
 		}
-		if addr, err = net.ResolveTCPAddr("tcp", string(buf[:l])); err != nil {
+		if addr, err = net.ResolveTCPAddr("tcp", string(buf[:dstLen])); err != nil {
 			return
 		}
 	default:
@@ -166,6 +152,7 @@ func getdstConn(conn *tr.Conn) (dst net.Conn, err error) {
 	if err != nil {
 		return
 	}
+	tr.Logger.Debugf("user:%s src:%s dst %s", conn.Token, conn.RemoteAddr(), addr.String())
 	dst, err = net.Dial(addr.Network(), addr.String())
 	return
 }
@@ -175,15 +162,16 @@ func handleConnection(conn *tr.Conn) {
 	dst, err := getdstConn(conn)
 	if err != nil {
 		tr.Logger.Error(err)
+		return
 	}
 	defer dst.Close()
 	go func() {
 		if err := tr.Copy(dst, conn); err != nil {
-			tr.Logger.Info(err)
+			tr.Logger.Info("client-->server  ", err)
 		}
 	}()
 	err = tr.Copy(conn, dst)
 	if err != nil {
-		tr.Logger.Info(err)
+		tr.Logger.Info("server<--client  ", err)
 	}
 }
