@@ -120,6 +120,10 @@ func handShake(conn net.Conn) (err error) {
 	}
 	// send confirmation: version 5, no authentication required
 	_, err = conn.Write([]byte{5, 0})
+	if err != nil {
+		tr.Logger.Error(err)
+		return
+	}
 	return
 }
 
@@ -217,21 +221,10 @@ func handleRequest(c net.Conn) {
 		tr.Logger.Error(err)
 		return
 	}
-
-	_, err = c.Write([]byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x08, 0x43})
+	_, err = c.Write([]byte{5, 0, 0, 1, 0, 0, 0, 0, 0, 0})
 	if err != nil {
-		tr.Logger.Error("send connection confirmation:", err.Error())
+		tr.Logger.Error(err)
 		return
-	}
-	tr.Logger.Debug("desired destination address :", host)
-	var res [10]byte
-	//ver
-	res[1] = 5
-	//atype
-	res[4] = 1
-	//replies
-	if _, err = c.Write(res[:]); err != nil {
-		tr.Logger.Fatal(err)
 	}
 	s, err := createServerConn(host)
 	if err != nil {

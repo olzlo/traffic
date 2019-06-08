@@ -39,7 +39,7 @@ func Pipe(client net.Conn, server net.Conn) (wc, rs int, err error) {
 	if err == nil {
 		err = ce
 	}
-	if err, ok := err.(net.Error); ok && err.Timeout() {
+	if nerr, ok := err.(net.Error); ok && nerr.Timeout() {
 		err = nil
 	}
 	return
