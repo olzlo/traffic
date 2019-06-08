@@ -104,7 +104,6 @@ func tcpListen() {
 
 func handShake(conn net.Conn) (err error) {
 	buf := make([]byte, 255)
-	tr.SetReadTimeout(conn)
 	//sock5 defined by rfc1928
 	if _, err = io.ReadFull(conn, buf[:2]); err != nil {
 		return
@@ -113,8 +112,8 @@ func handShake(conn net.Conn) (err error) {
 		return errors.New("sock version mismatch")
 	}
 	nmethod := int(buf[1])
-	tr.Logger.Debug("nmethod:", nmethod)
-	if nmethod > 0 { // has more methods to read, rare case
+	if nmethod > 0 {
+		// has more methods to read, rare case
 		if _, err = io.ReadFull(conn, buf[:nmethod]); err != nil {
 			return
 		}
@@ -151,7 +150,7 @@ func handShake(conn net.Conn) (err error) {
 */
 
 func getRequest(conn net.Conn) (host string, err error) {
-	buf := tr.BufferPool.Get(262)
+	var buf [262]byte
 	if _, err = io.ReadFull(conn, buf[:5]); err != nil {
 		return
 	}
@@ -191,8 +190,7 @@ func createServerConn(host string) (conn net.Conn, err error) {
 	if conn, err = connFactory(); err != nil {
 		return
 	}
-	buf := tr.BufferPool.Get(512)
-	defer tr.BufferPool.Put(buf)
+	var buf [512]byte
 	//ver
 	buf[0] = 1
 	//proto
@@ -219,6 +217,12 @@ func handleRequest(c net.Conn) {
 		tr.Logger.Error(err)
 		return
 	}
+
+	_, err = c.Write([]byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x08, 0x43})
+	if err != nil {
+		tr.Logger.Error("send connection confirmation:", err.Error())
+		return
+	}
 	tr.Logger.Debug("desired destination address :", host)
 	var res [10]byte
 	//ver
@@ -234,16 +238,8 @@ func handleRequest(c net.Conn) {
 		tr.Logger.Error(err)
 		return
 	}
-	defer s.Close()
-	go func() {
-		if err := tr.Copy(c, s); err != nil {
-			tr.Logger.Info(err)
-		}
-	}()
-
-	err = tr.Copy(s, c)
+	_, _, err = tr.Pipe(c, s)
 	if err != nil {
-		tr.Logger.Info(err)
+		tr.Logger.Error(err)
 	}
-
 }

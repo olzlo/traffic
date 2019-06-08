@@ -4,3 +4,7 @@ client/client
 server/server
 client/start.sh
 server/start.sh
+client/client.exe
+client/start.bat
+server/server.exe
+server/start.bat

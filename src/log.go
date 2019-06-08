@@ -1,12 +1,27 @@
 package src
 
 import (
-	"github.com/sirupsen/logrus"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
-var Logger = logrus.New()
+var Logger *zap.SugaredLogger
+
+func init() {
+	newLogger(zapcore.InfoLevel)
+}
 
 func EnableDebug() {
-	Logger.SetReportCaller(true)
-	Logger.SetLevel(logrus.DebugLevel)
+	newLogger(zapcore.DebugLevel)
+}
+
+func newLogger(lv zapcore.Level) {
+	cfg := zap.NewProductionConfig()
+	cfg.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+	cfg.Level = zap.NewAtomicLevelAt(lv)
+	logger, err := cfg.Build(zap.AddCaller(), zap.AddStacktrace(zap.PanicLevel))
+	if err != nil {
+		panic(err)
+	}
+	Logger = logger.Sugar()
 }

@@ -7,10 +7,6 @@ import (
 	"time"
 )
 
-const (
-	TransferBufferSize = 4096
-)
-
 type Conn struct {
 	net.Conn
 	*Cipher
@@ -26,15 +22,27 @@ func NewEncryptConn(c net.Conn, key []byte, stream func(key, iv []byte) (cipher.
 	}
 }
 
-func Copy(dst io.Writer, src io.Reader) (err error) {
-	b := BufferPool.Get(TransferBufferSize)
-	_, err = CopyBuffer(dst, src, b)
-	BufferPool.Put(b)
+func Pipe(client net.Conn, server net.Conn) (wc, rs int, err error) {
+	ch := make(chan error)
+	go func() {
+		n, err := io.Copy(client, server)
+		client.SetDeadline(time.Now())
+		server.SetDeadline(time.Now())
+		wc = int(n)
+		ch <- err
+	}()
+	n, err := io.Copy(server, client)
+	client.SetDeadline(time.Now())
+	server.SetDeadline(time.Now())
+	rs = int(n)
+	ce := <-ch
+	if err == nil {
+		err = ce
+	}
+	if err, ok := err.(net.Error); ok && err.Timeout() {
+		err = nil
+	}
 	return
-}
-
-func SetReadTimeout(c net.Conn) {
-	c.SetReadDeadline(time.Now().Add(6 * time.Second))
 }
 
 func (c *Conn) Write(b []byte) (n int, err error) {
@@ -44,40 +52,30 @@ func (c *Conn) Write(b []byte) (n int, err error) {
 		if err != nil {
 			return
 		}
-		defer BufferPool.Put(iv)
 		if n, err = c.Conn.Write(iv); err != nil {
 			return
 		}
 	}
-	cipherData := BufferPool.Get(TransferBufferSize)
+	cipherData := make([]byte, len(b))
 	c.encrypt(cipherData, b)
 	n, err = c.Conn.Write(cipherData[:len(b)])
-	BufferPool.Put(cipherData)
 	return
 }
 
 func (c *Conn) Read(b []byte) (n int, err error) {
 	if c.dec == nil {
-		iv := BufferPool.Get(8)
-		defer BufferPool.Put(iv)
-		if _, err = io.ReadFull(c.Conn, iv); err != nil {
+		var iv [8]byte
+		if _, err = io.ReadFull(c.Conn, iv[:]); err != nil {
 			return
 		}
-		if err = c.initDecrypt(iv); err != nil {
+		if err = c.initDecrypt(iv[:]); err != nil {
 			return
 		}
 	}
-	cipherData := BufferPool.Get(TransferBufferSize)
+	cipherData := make([]byte, len(b))
 	n, err = c.Conn.Read(cipherData[:len(b)])
 	if n > 0 {
 		c.decrypt(b[:n], cipherData[:n])
 	}
-	BufferPool.Put(cipherData)
-	return
-}
-
-func RemoteIP(conn net.Conn) (ip string) {
-	ip = conn.RemoteAddr().String()
-	ip, _, _ = net.SplitHostPort(ip)
 	return
 }

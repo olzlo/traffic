@@ -1,12 +1,11 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"net"
 	tr "traffic/src"
-
-	"errors"
 
 	"github.com/aead/chacha20"
 	kcp "github.com/xtaci/kcp-go"
@@ -110,9 +109,7 @@ func tcpListen() {
 */
 
 func authenticate(conn *tr.Conn) (addr net.Addr, err error) {
-	buf := tr.BufferPool.Get(261)
-	defer tr.BufferPool.Put(buf)
-	tr.SetReadTimeout(conn)
+	var buf [261]byte
 	if _, err = conn.Read(buf[:36]); err != nil {
 		return
 	}
@@ -157,21 +154,17 @@ func getdstConn(conn *tr.Conn) (dst net.Conn, err error) {
 	return
 }
 
-func handleConnection(conn *tr.Conn) {
-	defer conn.Close()
-	dst, err := getdstConn(conn)
+func handleConnection(c *tr.Conn) {
+	defer c.Close()
+	s, err := getdstConn(c)
 	if err != nil {
 		tr.Logger.Error(err)
 		return
 	}
-	defer dst.Close()
-	go func() {
-		if err := tr.Copy(dst, conn); err != nil {
-			tr.Logger.Info("client-->server  ", err)
-		}
-	}()
-	err = tr.Copy(conn, dst)
+	defer s.Close()
+	_, _, err = tr.Pipe(c, s)
 	if err != nil {
-		tr.Logger.Info("server<--client  ", err)
+		tr.Logger.Error(err)
 	}
+	tr.Logger.Debug("session finished")
 }
