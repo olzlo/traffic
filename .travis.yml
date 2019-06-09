@@ -1,6 +1,10 @@
 language: go
 go:
-  - 1.12
+  - master
+os:
+  - linux
+  - osx
+  - windows
 script:
   - cd client
-  - go build -ldflags "-s -w"
+  - env GO111MODULE=on go build -ldflags "-s -w"
