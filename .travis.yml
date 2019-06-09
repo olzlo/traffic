@@ -4,7 +4,8 @@ go:
 os:
   - linux
   - osx
-  - windows
 script:
   - cd client
+  - env GO111MODULE=on go build -ldflags "-s -w"
+  - cd ../server
   - env GO111MODULE=on go build -ldflags "-s -w"
