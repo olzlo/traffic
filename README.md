@@ -1,1 +1,2 @@
 [![Go Report Card](https://goreportcard.com/badge/containous/traefik)](https://goreportcard.com/report/github.com/olzlo/traffic)
+[![Build Status](https://travis-ci.org/olzlo/traffic.svg?branch=master)](https://travis-ci.org/olzlo/traffic)
