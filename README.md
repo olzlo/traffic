@@ -1,1 +1,1 @@
-# traffic
+[![Go Report Card](https://goreportcard.com/badge/containous/traefik)](https://goreportcard.com/report/github.com/olzlo/traffic)
